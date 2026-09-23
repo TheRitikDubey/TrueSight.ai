@@ -7,13 +7,14 @@ export interface ArticleContent {
   source: string;
 }
 
-export async function scrapeArticle(url: string): Promise<ArticleContent> {
+export async function scrapeArticle(url: string, signal?: AbortSignal): Promise<ArticleContent> {
   const { data: html } = await axios.get(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     },
     timeout: 10000,
+    signal,
   });
 
   const $ = cheerio.load(html);

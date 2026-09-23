@@ -1,4 +1,20 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { readCheckStream } from "./checkStream";
+
+interface SearchActivity {
+  query: string;
+  status: "completed" | "failed";
+  results: { title: string; url: string; content: string }[];
+  durationMs: number;
+  error?: string;
+}
+
+interface ProgressEvent {
+  type: "progress";
+  message: string;
+  elapsedMs: number;
+  search?: SearchActivity;
+}
 
 interface ClaimVerdict {
   id: number;
@@ -16,6 +32,22 @@ interface FactCheckResult {
   overallVerdict: string;
   overallConfidence: number;
   summary: string;
+  webSearch: { status: string; reason: string; searches: SearchActivity[] };
+  warnings: string[];
+  timings: { totalMs: number; planningMs: number; searchMs: number; verificationMs: number };
+}
+
+function SearchResults({ searches }: { searches: SearchActivity[] }) {
+  return <div className="space-y-3 text-left">
+    {searches.map((search, index) => <div key={index} className="text-sm space-y-1">
+      <p className="text-zinc-300 break-words">🔎 {search.query} <span className="text-zinc-500">· {(search.durationMs / 1000).toFixed(1)}s</span></p>
+      {search.error && <p className="text-amber-400">{search.error}</p>}
+      {search.status === "completed" && !search.results.length && <p className="text-zinc-500">No relevant sources found.</p>}
+      {search.results.map((source, i) => <a key={i} href={source.url} target="_blank" rel="noreferrer" className="block text-blue-400 hover:underline break-words">
+        {source.title || new URL(source.url).hostname}
+      </a>)}
+    </div>)}
+  </div>;
 }
 
 const verdictColor: Record<string, string> = {
@@ -60,6 +92,14 @@ function ResultCard({ result }: { result: FactCheckResult }) {
 
       <p className="text-zinc-300 text-sm leading-relaxed">{result.summary}</p>
 
+      {result.warnings.map((warning, i) => <p key={i} className="text-amber-400 text-sm" role="alert">{warning}</p>)}
+      <details className="border border-zinc-800 rounded-lg p-3" open={result.webSearch.status === "failed" || result.webSearch.status === "partial"}>
+        <summary className="cursor-pointer text-sm text-zinc-300">Web search: {result.webSearch.status} · {result.webSearch.searches.length} queries · {(result.timings.totalMs / 1000).toFixed(1)}s total</summary>
+        <p className="text-zinc-500 text-xs my-2">{result.webSearch.reason}</p>
+        <SearchResults searches={result.webSearch.searches} />
+        <p className="text-zinc-500 text-xs mt-3">Planning {(result.timings.planningMs / 1000).toFixed(1)}s · Search {(result.timings.searchMs / 1000).toFixed(1)}s · Verification {(result.timings.verificationMs / 1000).toFixed(1)}s</p>
+      </details>
+
       {result.claims.length > 0 && (
         <div className="space-y-3 pt-2 border-t border-zinc-800">
           <p className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">
@@ -97,6 +137,18 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<FactCheckResult[]>([]);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState("Connecting to the local model…");
+  const [searches, setSearches] = useState<SearchActivity[]>([]);
+  const [elapsed, setElapsed] = useState(0);
+  const controller = useRef<AbortController | null>(null);
+
+  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    if (!loading) return;
+    const start = Date.now();
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -104,12 +156,18 @@ export default function App() {
 
     setLoading(true);
     setError("");
+    setProgress("Connecting to the local model…");
+    setSearches([]);
+    setElapsed(0);
+    const requestController = new AbortController();
+    controller.current = requestController;
 
     try {
       const res = await fetch("/api/check", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({ input: input.trim() }),
+        signal: requestController.signal,
       });
 
       if (!res.ok) {
@@ -117,12 +175,24 @@ export default function App() {
         throw new Error(err.error || "Request failed");
       }
 
-      const data: FactCheckResult = await res.json();
-      setResults((prev) => [data, ...prev]);
+      let data: FactCheckResult | undefined;
+      await readCheckStream(res, (raw) => {
+        const event = raw as ProgressEvent | { type: "result"; result: FactCheckResult } | { type: "error"; error: string } | { type: "heartbeat" };
+        if (event.type === "error") throw new Error(event.error);
+        if (event.type === "progress") {
+          setProgress(event.message);
+          if (event.search) setSearches((previous) => [...previous, event.search!]);
+        }
+        if (event.type === "result") data = event.result;
+      });
+      if (!data) throw new Error("Connection ended before the result arrived. Please retry.");
+      const completed = data;
+      setResults((prev) => [completed, ...prev]);
       setInput("");
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
+    } catch (err: unknown) {
+      setError(requestController.signal.aborted ? "Check cancelled." : err instanceof Error ? err.message : "Something went wrong");
     } finally {
+      controller.current = null;
       setLoading(false);
     }
   }
@@ -144,9 +214,12 @@ export default function App() {
             <input
               type="text"
               value={input}
+              aria-label="News text, factual question, or URL"
+              maxLength={10000}
+              disabled={loading}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Paste a news URL or type a claim..."
-              className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition"
+              placeholder="Paste a news URL, claim, or question..."
+              className="min-w-0 flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition"
             />
             <button
               type="submit"
@@ -162,8 +235,10 @@ export default function App() {
         {loading && (
           <div className="text-center text-zinc-400 py-8 space-y-2">
             <div className="text-4xl animate-pulse">🔍</div>
-            <p>Extracting claims and searching the web...</p>
-            <p className="text-xs text-zinc-600">This takes 10-20 seconds</p>
+            <p role="status" aria-live="polite">{progress}</p>
+            <p className="text-xs text-zinc-500">{elapsed}s elapsed</p>
+            <button type="button" onClick={() => controller.current?.abort()} className="text-sm text-zinc-400 underline">Cancel</button>
+            <SearchResults searches={searches} />
           </div>
         )}
 
