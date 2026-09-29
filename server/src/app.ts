@@ -1,14 +1,17 @@
 import express from "express";
 import cors from "cors";
+import { conversationRoutes } from "./chat/routes.js";
+import { generateReply } from "./chat/service.js";
 import { factCheck } from "./agents/factCheckAgent.js";
 
-export function createApp(runCheck = factCheck) {
+export function createApp(runCheck = factCheck, runChat = generateReply) {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "32kb" }));
   app.get("/api/health", (_, res) => {
     res.json({ status: "ok", agent: "TrueSight.ai", searchConfigured: Boolean(process.env.TAVILY_API_KEY?.trim()) });
   });
+  app.use("/api/conversations", conversationRoutes(runChat));
   app.post("/api/check", async (req, res) => {
     const input = req.body?.input;
     if (typeof input !== "string" || !input.trim() || input.trim().length > 10000) {
