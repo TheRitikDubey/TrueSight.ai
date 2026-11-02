@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "test:auth": "RUN_AUTH_INTEGRATION=1 node --import tsx --test test/auth.test.ts",
     "test:chat": "RUN_CHAT_INTEGRATION=1 node --import tsx --test test/chat.test.ts"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.1",
+    "google-auth-library": "^11.1.0",
     "openai": "^4.0.0",
     "zod": "^3.24.1"
   },

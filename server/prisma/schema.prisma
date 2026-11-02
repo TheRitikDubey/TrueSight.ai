@@ -7,6 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String
+  avatar       String?
+  googleId     String        @unique
+  authProvider String        @default("google")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     AuthSession[]
+}
+
+model AuthSession {
+  tokenHash String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model OAuthAttempt {
+  stateHash    String   @id
+  browserHash  String
+  codeVerifier String
+  nonce        String
+  returnTo     String
+  expiresAt    DateTime
+
+  @@index([expiresAt])
+}
+
 model Conversation {
   id              String    @id @default(cuid())
   ownerId         String

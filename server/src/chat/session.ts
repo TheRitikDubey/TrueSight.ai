@@ -2,7 +2,8 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 
 // A bearer token in an HttpOnly cookie; only its hash is stored in the database.
-// Replace this owner resolution with your user ID when account authentication is added.
+// Browser history remains independent of account authentication in this phase.
+// Future account history must use requireAuth/res.locals.user, never a client-supplied ID.
 export function chatSession(req: Request, res: Response, next: NextFunction) {
   if (req.get("sec-fetch-site") === "cross-site") {
     res.status(403).json({ error: "Open chat from the TrueSight app." });

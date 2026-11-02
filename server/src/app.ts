@@ -3,11 +3,15 @@ import cors from "cors";
 import { conversationRoutes } from "./chat/routes.js";
 import { generateReply } from "./chat/service.js";
 import { factCheck } from "./agents/factCheckAgent.js";
+import { authRoutes } from "./auth/routes.js";
+import { frontendUrl } from "./auth/config.js";
+import type { GoogleProvider } from "./auth/google.js";
 
-export function createApp(runCheck = factCheck, runChat = generateReply) {
+export function createApp(runCheck = factCheck, runChat = generateReply, authProvider?: GoogleProvider) {
   const app = express();
-  app.use(cors());
+  app.use(cors({ origin: frontendUrl() }));
   app.use(express.json({ limit: "32kb" }));
+  app.use("/api/auth", authRoutes(authProvider));
   app.get("/api/health", (_, res) => {
     res.json({ status: "ok", agent: "TrueSight.ai", searchConfigured: Boolean(process.env.TAVILY_API_KEY?.trim()) });
   });
