@@ -9,7 +9,7 @@ import type { GoogleProvider } from "./auth/google.js";
 
 export function createApp(runCheck = factCheck, runChat = generateReply, authProvider?: GoogleProvider) {
   const app = express();
-  app.use(cors({ origin: frontendUrl() }));
+  app.use(cors({ origin: frontendUrl(), credentials: true }));
   app.use(express.json({ limit: "32kb" }));
   app.use("/api/auth", authRoutes(authProvider));
   app.get("/api/health", (_, res) => {

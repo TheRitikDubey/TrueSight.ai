@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { readCheckStream } from "../../checkStream";
 import { chatRequest } from "./api";
 import { useAuth } from "../../auth/context";
+import { API_URL } from "../../config";
 import type {
   ChatEvent,
   Conversation,
@@ -181,6 +182,7 @@ export function useChat() {
         // Let creation finish even if navigation aborts generation, so retries keep the same ID.
         const conversation = await chatRequest<Conversation>("", {
           method: "POST",
+          credentials: "include",
           body: "{}",
         });
         if (version !== epoch.current) {
@@ -193,9 +195,10 @@ export function useChat() {
         upsert(conversation);
       }
       const response = await fetch(
-        `/api/conversations/${encodeURIComponent(id)}/messages`,
+        `${API_URL}/api/conversations/${encodeURIComponent(id)}/messages`,
         {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
             Accept: "application/x-ndjson",

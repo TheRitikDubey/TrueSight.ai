@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
-
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 const PORT = process.env.PORT || 3001;
 createApp().listen(PORT, () => {

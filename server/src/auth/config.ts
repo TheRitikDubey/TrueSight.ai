@@ -17,8 +17,8 @@ export function googleConfig() {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
   const redirectUri = process.env.GOOGLE_CALLBACK_URL?.trim() || `${frontendUrl()}/api/auth/google/callback`;
-  // Frontend and /api are served together, including through Vite in development.
-  if (!clientId || !clientSecret || redirectUri !== `${frontendUrl()}/api/auth/google/callback`) {
+  // The callback is served by the backend, which may be a different origin than the frontend.
+  if (!clientId || !clientSecret || !URL.canParse(redirectUri) || new URL(redirectUri).pathname !== "/api/auth/google/callback") {
     throw new Error("Google sign-in configuration is incomplete.");
   }
   return { clientId, clientSecret, redirectUri };

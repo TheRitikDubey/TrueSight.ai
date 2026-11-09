@@ -1,8 +1,11 @@
+import { API_URL } from "../../config";
+
 export async function chatRequest<T>(
   path = "",
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`/api/conversations${path}`, {
+  const response = await fetch(`${API_URL}/api/conversations${path}`, {
+    credentials: "include",
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
